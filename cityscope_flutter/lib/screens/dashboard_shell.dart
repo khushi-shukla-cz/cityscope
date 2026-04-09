@@ -155,6 +155,11 @@ class _DashboardShellState extends State<DashboardShell> {
   }
 
   void _showSectionPicker() {
+    const Set<int> quickNavIndexes = <int>{0, 1, 3, 8};
+    final List<int> moreIndexes = List<int>.generate(_destinations.length, (int i) => i)
+        .where((int i) => !quickNavIndexes.contains(i))
+        .toList();
+
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFF1A1A2E),
@@ -165,16 +170,17 @@ class _DashboardShellState extends State<DashboardShell> {
         return SafeArea(
           child: ListView.builder(
             shrinkWrap: true,
-            itemCount: _destinations.length,
+            itemCount: moreIndexes.length,
             itemBuilder: (BuildContext context, int index) {
-              final NavData nav = _destinations[index];
+              final int destinationIndex = moreIndexes[index];
+              final NavData nav = _destinations[destinationIndex];
               return ListTile(
                 leading: Text(nav.emoji, style: const TextStyle(fontSize: 20)),
                 title: Text(nav.title),
                 subtitle: Text(nav.label),
-                selected: _currentIndex == index,
+                selected: _currentIndex == destinationIndex,
                 onTap: () {
-                  setState(() => _currentIndex = index);
+                  setState(() => _currentIndex = destinationIndex);
                   Navigator.of(context).pop();
                 },
               );
@@ -1102,7 +1108,7 @@ class _DashboardShellState extends State<DashboardShell> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text('Mayor Chen', style: GoogleFonts.orbitron(fontSize: 18, fontWeight: FontWeight.w700)),
+                        Text('Khushi Shukla', style: GoogleFonts.orbitron(fontSize: 18, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 3),
                         Text('${_state.cityName} • Est. 2024', style: const TextStyle(color: AppTheme.textDim, fontSize: 12)),
                       ],
