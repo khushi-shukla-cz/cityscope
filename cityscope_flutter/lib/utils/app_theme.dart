@@ -12,7 +12,7 @@ class AppTheme {
   static const Color cardBg = Color(0x1AFFFFFF);
   static const Color cardBorder = Color(0x1FFFFFFF);
   static const Color text = Color(0xFFE8EAF0);
-  static const Color textDim = Color(0xFF8892A4);
+  static const Color textDim = Color(0xFFB8C2D6);
 
   static ThemeData dark() {
     final base = ThemeData.dark(useMaterial3: true);

@@ -1198,11 +1198,35 @@ class _DashboardShellState extends State<DashboardShell> {
   }
 
   void _snack(String message) {
+    final String lower = message.toLowerCase();
+    final bool isBudgetWarning =
+        lower.contains('insufficient budget') || lower.contains('not enough budget') || lower.contains('not enough');
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
+        content: Row(
+          children: <Widget>[
+            if (isBudgetWarning)
+              const Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: Icon(Icons.warning_amber_rounded, color: Colors.white, size: 20),
+              ),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ],
+        ),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color(0xFF25253A),
+        backgroundColor: isBudgetWarning ? const Color(0xFF9C2F1A) : const Color(0xFF25253A),
+        showCloseIcon: true,
+        closeIconColor: Colors.white,
       ),
     );
   }
