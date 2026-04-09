@@ -26,6 +26,7 @@ class _DashboardShellState extends State<DashboardShell> {
   final CityAppState _state = CityAppState();
   final TextEditingController _cityController = TextEditingController(text: 'Nova City');
   late Timer _ticker;
+  late Timer _simTimer;
 
   bool _showSplash = true;
   bool _showHomeMap = true;
@@ -43,11 +44,18 @@ class _DashboardShellState extends State<DashboardShell> {
         _nowTime = DateFormat('hh:mm a').format(DateTime.now());
       });
     });
+    _simTimer = Timer.periodic(const Duration(seconds: 6), (_) {
+      if (!mounted || _showSplash) {
+        return;
+      }
+      setState(_state.simulateTick);
+    });
   }
 
   @override
   void dispose() {
     _ticker.cancel();
+    _simTimer.cancel();
     _cityController.dispose();
     super.dispose();
   }
@@ -394,6 +402,7 @@ class _DashboardShellState extends State<DashboardShell> {
         progress: (_state.availableBudgetM / _state.maxBudgetM).clamp(0, 1),
         color: AppTheme.green,
         delta: 'Weekly stability',
+        onTap: () => setState(() => _currentIndex = 3),
       ),
       KpiCard(
         icon: '😊',
@@ -402,6 +411,7 @@ class _DashboardShellState extends State<DashboardShell> {
         progress: _state.happiness / 100,
         color: AppTheme.yellow,
         delta: 'Steady growth',
+        onTap: () => setState(() => _currentIndex = 6),
       ),
       KpiCard(
         icon: '🌫️',
@@ -410,6 +420,7 @@ class _DashboardShellState extends State<DashboardShell> {
         progress: _state.pollution / 100,
         color: AppTheme.orange,
         delta: 'Track this daily',
+        onTap: () => setState(() => _currentIndex = 4),
       ),
       KpiCard(
         icon: '🚗',
@@ -418,6 +429,7 @@ class _DashboardShellState extends State<DashboardShell> {
         progress: _state.traffic / 100,
         color: AppTheme.blue,
         delta: 'Moderate flow',
+        onTap: () => setState(() => _currentIndex = 5),
       ),
     ];
   }
@@ -569,15 +581,10 @@ class _DashboardShellState extends State<DashboardShell> {
               const SizedBox(height: 10),
               InkWell(
                 onTap: () {
-                  final selected = _state.selectedInfrastructure;
-                  if (selected == null) {
-                    _snack('Select a building first.');
-                    return;
-                  }
                   setState(() {
-                    _state.placeSelectedBuilding();
+                    final String message = _state.placeSelectedBuilding();
+                    _snack(message);
                   });
-                  _snack('${selected.emoji} ${selected.name} placed successfully.');
                 },
                 borderRadius: BorderRadius.circular(14),
                 child: Container(
@@ -659,15 +666,6 @@ class _DashboardShellState extends State<DashboardShell> {
   }
 
   Widget _budgetScreen() {
-    final List<_BudgetDepartment> departments = <_BudgetDepartment>[
-      _BudgetDepartment('🏥 Healthcare', 1.8, 3, Colors.red),
-      _BudgetDepartment('📚 Education', 1.4, 3, AppTheme.purple),
-      _BudgetDepartment('🚦 Transport', 1.2, 2, AppTheme.blue),
-      _BudgetDepartment('🌳 Environment', 0.9, 2, AppTheme.green),
-      _BudgetDepartment('🔒 Safety', 1.1, 2, Colors.deepOrange),
-      _BudgetDepartment('🏗️ Infrastructure', 2.0, 3, Colors.blueGrey),
-    ];
-
     return ListView(
       children: <Widget>[
         GlassCard(
@@ -691,28 +689,32 @@ class _DashboardShellState extends State<DashboardShell> {
                 ),
               ),
               const SizedBox(height: 14),
-              ...departments.map(
-                (_BudgetDepartment d) => Padding(
+              ..._state.departments.asMap().entries.map(
+                (MapEntry<int, BudgetDepartment> entry) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Column(
                     children: <Widget>[
                       Row(
                         children: <Widget>[
-                          Expanded(child: Text(d.name)),
-                          Text('\$${d.value.toStringAsFixed(1)}M', style: GoogleFonts.jetBrainsMono(color: d.color)),
+                          Expanded(child: Text(entry.value.name)),
+                          Text('\$${entry.value.value.toStringAsFixed(1)}M', style: GoogleFonts.jetBrainsMono(color: entry.value.color)),
                         ],
                       ),
                       SliderTheme(
                         data: SliderTheme.of(context).copyWith(
-                          activeTrackColor: d.color,
-                          thumbColor: d.color,
+                          activeTrackColor: entry.value.color,
+                          thumbColor: entry.value.color,
                           inactiveTrackColor: Colors.white10,
                         ),
                         child: Slider(
-                          value: d.value,
+                          value: entry.value.value,
                           min: 0,
-                          max: d.max,
-                          onChanged: null,
+                          max: entry.value.max,
+                          onChanged: (double v) {
+                            setState(() {
+                              _state.updateDepartment(entry.key, v);
+                            });
+                          },
                         ),
                       ),
                     ],
@@ -792,7 +794,14 @@ class _DashboardShellState extends State<DashboardShell> {
                 children: <Widget>[
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () => setState(_state.addGreenery),
+                      onPressed: () => setState(() {
+                        if (!_state.canAfford(0.1)) {
+                          _snack('Not enough budget to add greenery.');
+                          return;
+                        }
+                        _state.addGreenery();
+                        _snack('Greenery added. Pollution reduced.');
+                      }),
                       style: ElevatedButton.styleFrom(backgroundColor: AppTheme.green, foregroundColor: Colors.white),
                       child: const Text('🌳 Add Greenery'),
                     ),
@@ -800,7 +809,14 @@ class _DashboardShellState extends State<DashboardShell> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () => setState(_state.addFactory),
+                      onPressed: () => setState(() {
+                        if (!_state.canAfford(0.5)) {
+                          _snack('Not enough budget to add factory.');
+                          return;
+                        }
+                        _state.addFactory();
+                        _snack('Factory added. Watch pollution and traffic.');
+                      }),
                       style: ElevatedButton.styleFrom(backgroundColor: AppTheme.orange),
                       child: const Text('🏭 Add Factory'),
                     ),
@@ -815,7 +831,7 @@ class _DashboardShellState extends State<DashboardShell> {
                   _metricBox('Air Quality Index', '$aqi', AppTheme.yellow),
                   _metricBox('Green Coverage', '${_state.greenery}%', AppTheme.green),
                   _metricBox('Industrial Zones', '${_state.industrialZones}', AppTheme.orange),
-                  _metricBox('Health Score', '${(100 - _state.pollution * 0.4).round()}', AppTheme.blue),
+                  _metricBox('Health Score', '${_state.healthScore}', AppTheme.blue),
                 ],
               ),
             ],
@@ -847,25 +863,37 @@ class _DashboardShellState extends State<DashboardShell> {
   }
 
   Widget _trafficScreen() {
-    const List<Map<String, dynamic>> roads = <Map<String, dynamic>>[
-      <String, dynamic>{'name': 'Main Avenue', 'congestion': 72, 'speed': 25, 'emoji': '🚗'},
-      <String, dynamic>{'name': 'Park Boulevard', 'congestion': 35, 'speed': 55, 'emoji': '🚙'},
-      <String, dynamic>{'name': 'Harbor Road', 'congestion': 58, 'speed': 38, 'emoji': '🚕'},
-      <String, dynamic>{'name': 'Industrial Way', 'congestion': 85, 'speed': 18, 'emoji': '🚌'},
-    ];
-
     return ListView(
       children: <Widget>[
+        GlassCard(
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: <Widget>[
+              _metricBox('Avg Speed', '${_state.averageSpeed} km/h', AppTheme.blue),
+              _metricBox('Traffic Load', '${_state.traffic}%', AppTheme.orange),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
         GlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               const SectionTitle('Road Conditions'),
               const SizedBox(height: 10),
-              ...roads.map(
-                (Map<String, dynamic> road) => Padding(
+              ..._state.trafficRoads.asMap().entries.map(
+                (MapEntry<int, TrafficRoad> entry) => Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: Container(
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        final String message = _state.toggleTrafficSignal(entry.key);
+                        _snack(message);
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: const Color(0xFF1A1A2E),
@@ -874,15 +902,15 @@ class _DashboardShellState extends State<DashboardShell> {
                     ),
                     child: Row(
                       children: <Widget>[
-                        Text(road['emoji'].toString(), style: const TextStyle(fontSize: 22)),
+                        Text(entry.value.emoji, style: const TextStyle(fontSize: 22)),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
-                              Text(road['name'].toString()),
+                              Text(entry.value.name),
                               Text(
-                                'Congestion ${road['congestion']}% • Speed ${road['speed']} km/h',
+                                'Congestion ${entry.value.congestion}% • Speed ${entry.value.speed} km/h',
                                 style: const TextStyle(fontSize: 12, color: AppTheme.textDim),
                               ),
                             ],
@@ -892,17 +920,18 @@ class _DashboardShellState extends State<DashboardShell> {
                           width: 12,
                           height: 12,
                           decoration: BoxDecoration(
-                            color: (road['congestion'] as int) > 60 ? AppTheme.orange : AppTheme.green,
+                            color: entry.value.optimized ? AppTheme.green : AppTheme.orange,
                             borderRadius: BorderRadius.circular(100),
                             boxShadow: <BoxShadow>[
                               BoxShadow(
-                                color: ((road['congestion'] as int) > 60 ? AppTheme.orange : AppTheme.green).withValues(alpha: 0.6),
+                                color: (entry.value.optimized ? AppTheme.green : AppTheme.orange).withValues(alpha: 0.6),
                                 blurRadius: 8,
                               ),
                             ],
                           ),
                         ),
                       ],
+                    ),
                     ),
                   ),
                 ),
@@ -930,8 +959,10 @@ class _DashboardShellState extends State<DashboardShell> {
                   final bool active = _state.activeEvent == event;
                   return InkWell(
                     onTap: () {
-                      setState(() => _state.startEvent(event));
-                      _snack('${event.name} started. Happiness +${event.happinessBoost}%');
+                      setState(() {
+                        final String message = _state.startEvent(event);
+                        _snack(message);
+                      });
                     },
                     borderRadius: BorderRadius.circular(14),
                     child: Container(
@@ -994,20 +1025,29 @@ class _DashboardShellState extends State<DashboardShell> {
           spacing: 10,
           runSpacing: 10,
           children: <Widget>[
-            _reportKpi('Overall Grade', 'B+', AppTheme.green),
+            _reportKpi('Overall Grade', _state.overallGrade, AppTheme.green),
             _reportKpi('Population', NumberFormat.compact().format(_state.population), AppTheme.blue),
             _reportKpi('Happiness', '${_state.happiness}%', AppTheme.yellow),
             _reportKpi('Pollution', '${_state.pollution}%', AppTheme.orange),
           ],
         ),
         const SizedBox(height: 14),
-        const GlassCard(
+        GlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              SectionTitle('Monthly Progress'),
-              SizedBox(height: 10),
-              MiniLineChart(values: <double>[60, 62, 65, 67, 68, 70, 71, 72, 73, 74, 74, 74], color: AppTheme.yellow),
+              const SectionTitle('Monthly Progress'),
+              const SizedBox(height: 10),
+              MiniLineChart(
+                values: <double>[
+                  (_state.happiness - 12).toDouble(),
+                  (_state.happiness - 8).toDouble(),
+                  (_state.happiness - 5).toDouble(),
+                  (_state.happiness - 2).toDouble(),
+                  _state.happiness.toDouble(),
+                ],
+                color: AppTheme.yellow,
+              ),
             ],
           ),
         ),
@@ -1188,15 +1228,6 @@ class _GridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _BudgetDepartment {
-  _BudgetDepartment(this.name, this.value, this.max, this.color);
-
-  final String name;
-  final double value;
-  final double max;
-  final Color color;
 }
 
 class _InfoTag extends StatelessWidget {
